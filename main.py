@@ -39,7 +39,10 @@ class obj_Entity:
     def draw(self):
         tile_x, tile_y = draw_iso(self.x, self.y)
         # draw our entity's ASCII symbol at an offset
-        blt.put_ext(tile_x, tile_y, 0, blt.state(blt.TK_CELL_HEIGHT), self.char)
+        # blt.put_ext(tile_x, tile_y, 0, blt.state(blt.TK_CELL_HEIGHT), self.char)
+
+        # draw the tile at different offset because size of a tile is much different than the size of an ASCII letter
+        blt.put_ext(tile_x, tile_y, 0, 2, self.char)
 
 def map_create():
     new_map = [[struct_Tile(False) for y in range(0, constants.MAP_HEIGHT)] for x in range(0, constants.MAP_WIDTH)]
@@ -81,6 +84,8 @@ def draw_map(map_draw):
 
             else:
                 # draw floor
+                blt.put(tile_x, tile_y, 0x3002)
+                #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
                 blt.put(tile_x, tile_y, ".")
 
 
@@ -150,6 +155,13 @@ def game_initialize():
 
     # needed to avoid insta-close
     blt.refresh()
+
+    # tiles
+    # we use Unicode code point 3002 instead of a normal dot because the dot will be necessary for message log
+    blt.set("0x3002: gfx/floor_sand.png, align=center")
+    # no such problems with @ and #
+    blt.set("0x23: gfx/wall_stone.png, align=center")  # "#"
+    blt.set("0x40: gfx/human_m.png, align=center")  # "@"
 
     GAME = obj_Game()
 
