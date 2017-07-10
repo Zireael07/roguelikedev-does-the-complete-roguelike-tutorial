@@ -7,3 +7,8 @@ MAP_WIDTH = 20
 # default BearLibTerminal cell size is 8 px wide 16 px high
 TILE_HEIGHT = 2
 TILE_WIDTH = 8
+
+#parameters for dungeon generator
+ROOM_MAX_SIZE = 6
+ROOM_MIN_SIZE = 4
+MAX_ROOMS = 4
