@@ -1,3 +1,5 @@
+# coding: utf8
+
 from bearlibterminal import terminal as blt
 import libtcodpy as libtcod
 
@@ -13,8 +15,11 @@ class struct_Tile:
 class obj_Game:
     def __init__(self):
         self.current_map, self.current_rooms = map_create()
-        # = map_create()[1]
         self.current_entities = []
+
+    def add_entity(self, entity):
+        if entity is not None:
+            self.current_entities.append(entity)
 
 class Rect:
     # a rectangle on the map. used to characterize a room.
@@ -51,9 +56,13 @@ class obj_Entity:
             print("Tried to move out of map")
             return
 
+        target = None
+
+        target = map_check_for_creature(self.x + dx, self.y + dy, self)
+
         tile_is_wall = (GAME.current_map[self.x + dx][self.y + dy].block_path == True)
 
-        if not tile_is_wall:
+        if not tile_is_wall and target is None:
             self.x += dx
             self.y += dy
 
@@ -183,6 +192,27 @@ def map_calculate_fov():
         libtcod.map_compute_fov(FOV_MAP, PLAYER.x, PLAYER.y, constants.LIGHT_RADIUS, constants.FOV_LIGHT_WALLS,
                                 constants.FOV_ALGO)
 
+def map_check_for_creature(x, y, exclude_entity=None):
+
+    target = None
+
+    # find entity that isn't excluded
+    if exclude_entity:
+        for ent in GAME.current_entities:
+            if (ent is not exclude_entity
+                and ent.x == x
+                and ent.y == y):
+                target = ent
+
+            if target:
+                return target
+
+    # find any entity if no exclusions
+    else:
+        for ent in GAME.current_entities:
+            if (ent.x == x
+                and ent.y == y):
+                target = ent
 
 
 # based on STI library for LOVE2D
@@ -242,6 +272,32 @@ def draw_game():
     for ent in GAME.current_entities:
         ent.draw()
 
+# Get free tiles of our map
+def get_free_tiles(inc_map):
+    free_tiles = []
+    for y in range(len(inc_map)):
+        for x in range(len(inc_map[0])):
+            if not inc_map[x][y].block_path:
+                free_tiles.append((x, y))
+    return free_tiles
+
+# The traditional way of picking a random spot seems to be iterating over all tiles, if it's blocked, retry
+# ... if reached a certain number of tries, abort...
+# This way, we only need to pick a random index of a list, we don't have to retry at all
+def random_free_tile(inc_map):
+    free_tiles = get_free_tiles(inc_map)
+    index = libtcod.random_get_int(0, 0, len(free_tiles) - 1)
+    # print("Index is " + str(index))
+    x = free_tiles[index][0]
+    y = free_tiles[index][1]
+    print("Coordinates are " + str(x) + " " + str(y))
+    return x, y
+
+# This function will be expanded on later, that's why I'm not changing the actual Entity's init()
+# X,Y need to come last because we're using tuple unwrapping
+def NPC_wrapper(char, x,y):
+    NPC = obj_Entity(x,y, char)
+    return NPC
 
 # Core game stuff
 def game_main_loop():
@@ -295,7 +351,7 @@ def game_handle_keys():
 
 
 def game_initialize():
-    global GAME, PLAYER, FOV_CALCULATE
+    global GAME, PLAYER, FOV_CALCULATE, ENEMY, ENEMY2
 
     blt.open()
     # default terminal size is 80x25
@@ -314,6 +370,9 @@ def game_initialize():
     # no such problems with @ and #
     blt.set("0x23: gfx/wall_stone.png, align=center")  # "#"
     blt.set("0x40: gfx/human_m.png, align=center")  # "@"
+    # NPCs (we use Unicode private area here)
+    blt.set("0xE000: gfx/kobold.png,  align=center")  # ""
+    blt.set("0xE001: gfx/goblin.png, align=center")
 
     GAME = obj_Game()
 
@@ -323,7 +382,14 @@ def game_initialize():
     PLAYER = obj_Entity(player_x, player_y, "@")
     #PLAYER = obj_Entity(1, 1, "@")
 
-    GAME.current_entities = [PLAYER]
+    # two test enemies
+    # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
+    # the GAME.add_entity function wraps the current_entities.append and checks if we're not trying to add a None
+    GAME.add_entity(NPC_wrapper(0xE000, *random_free_tile(GAME.current_map)))
+    GAME.add_entity(NPC_wrapper(0xE001, *random_free_tile(GAME.current_map)))
+
+    # put player last
+    GAME.current_entities.append(PLAYER)
 
 # Execute
 if __name__ == '__main__':
