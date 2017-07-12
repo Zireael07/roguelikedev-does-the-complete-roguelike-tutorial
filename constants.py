@@ -1,3 +1,4 @@
+import libtcodpy as libtcod
 
 # Map size
 MAP_HEIGHT = 20
@@ -12,3 +13,8 @@ TILE_WIDTH = 8
 ROOM_MAX_SIZE = 6
 ROOM_MIN_SIZE = 4
 MAX_ROOMS = 4
+
+#FOV
+FOV_ALGO = libtcod.FOV_BASIC
+FOV_LIGHT_WALLS = True
+LIGHT_RADIUS = 4

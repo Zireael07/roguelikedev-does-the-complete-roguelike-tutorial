@@ -7,6 +7,7 @@ import constants
 class struct_Tile:
     def __init__(self, block_path):
         self.block_path = block_path
+        self.explored = False
 
 # Storing our stuff in one place
 class obj_Game:
@@ -58,12 +59,15 @@ class obj_Entity:
 
 
     def draw(self):
-        tile_x, tile_y = draw_iso(self.x, self.y)
-        # draw our entity's ASCII symbol at an offset
-        # blt.put_ext(tile_x, tile_y, 0, blt.state(blt.TK_CELL_HEIGHT), self.char)
+        is_visible = libtcod.map_is_in_fov(FOV_MAP, self.x, self.y)
 
-        # draw the tile at different offset because size of a tile is much different than the size of an ASCII letter
-        blt.put_ext(tile_x, tile_y, 0, 2, self.char)
+        if is_visible:
+            tile_x, tile_y = draw_iso(self.x, self.y)
+            # draw our entity's ASCII symbol at an offset
+            # blt.put_ext(tile_x, tile_y, 0, blt.state(blt.TK_CELL_HEIGHT), self.char)
+
+            # draw the tile at different offset because size of a tile is much different than the size of an ASCII letter
+            blt.put_ext(tile_x, tile_y, 0, 2, self.char)
 
 # dungeon generation functions
 def create_room(room, map):
@@ -156,7 +160,30 @@ def map_create():
     #     new_map[0][y].block_path = True
     #     new_map[constants.MAP_HEIGHT-1][y].block_path = True
 
+    map_make_fov(new_map)
+
     return new_map, rooms
+
+
+def map_make_fov(incoming_map):
+    global FOV_MAP
+
+    FOV_MAP = libtcod.map_new(constants.MAP_WIDTH, constants.MAP_HEIGHT)
+
+    for y in range(constants.MAP_HEIGHT):
+        for x in range(constants.MAP_WIDTH):
+            libtcod.map_set_properties(FOV_MAP, x,y,
+                                       not incoming_map[x][y].block_path, not incoming_map[x][y].block_path)
+
+def map_calculate_fov():
+    global FOV_CALCULATE
+
+    if FOV_CALCULATE:
+        FOV_CALCULATE = False
+        libtcod.map_compute_fov(FOV_MAP, PLAYER.x, PLAYER.y, constants.LIGHT_RADIUS, constants.FOV_LIGHT_WALLS,
+                                constants.FOV_ALGO)
+
+
 
 # based on STI library for LOVE2D
 # this places 0,0 at the top of the screen in the middle
@@ -172,24 +199,45 @@ def draw_iso(x,y):
 def draw_map(map_draw):
     for x in range(0, constants.MAP_WIDTH):
         for y in range(0, constants.MAP_HEIGHT):
-            tile_x, tile_y = draw_iso(x, y)
 
-            if map_draw[x][y].block_path == True:
-                # draw wall
-                blt.put(tile_x, tile_y, "#")
+            is_visible = libtcod.map_is_in_fov(FOV_MAP, x, y)
 
-            else:
-                # draw floor
-                blt.put(tile_x, tile_y, 0x3002)
-                #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
-                blt.put(tile_x, tile_y, ".")
+            if is_visible:
+                tile_x, tile_y = draw_iso(x, y)
+                blt.color("white")
+                map_draw[x][y].explored = True
 
+                if map_draw[x][y].block_path == True:
+                    # draw wall
+                    blt.put(tile_x, tile_y, "#")
+
+                else:
+                    # draw floor
+                    blt.put(tile_x, tile_y, 0x3002)
+                    #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
+                    blt.put(tile_x, tile_y, ".")
+
+            elif map_draw[x][y].explored:
+                tile_x, tile_y = draw_iso(x, y)
+                # shade the explored tiles
+                blt.color("gray")
+                if map_draw[x][y].block_path == True:
+                    # draw wall
+                    blt.put(tile_x, tile_y, "#")
+
+                else:
+                    # draw floor
+                    blt.put(tile_x, tile_y, 0x3002)
+                    #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
+                    blt.put(tile_x, tile_y, ".")
 
 
 def draw_game():
     # draw map
     draw_map(GAME.current_map)
 
+    # because the map might have been drawn in another color
+    blt.color("white")
     # draw our entities
     for ent in GAME.current_entities:
         ent.draw()
@@ -214,6 +262,8 @@ def game_main_loop():
         while not game_quit and blt.has_input():
             player_action = game_handle_keys()
 
+            map_calculate_fov()
+
             if player_action == "QUIT":
                 game_quit = True
 
@@ -222,6 +272,8 @@ def game_main_loop():
 
 
 def game_handle_keys():
+    global FOV_CALCULATE
+
     key = blt.read()
 
     if key in (blt.TK_ESCAPE, blt.TK_CLOSE):
@@ -230,16 +282,20 @@ def game_handle_keys():
     # Player movement
     if key == blt.TK_UP:
         PLAYER.move(0, -1)
+        FOV_CALCULATE = True
     if key == blt.TK_DOWN:
         PLAYER.move(0, 1)
+        FOV_CALCULATE = True
     if key == blt.TK_LEFT:
         PLAYER.move(-1, 0)
+        FOV_CALCULATE = True
     if key == blt.TK_RIGHT:
         PLAYER.move(1, 0)
+        FOV_CALCULATE = True
 
 
 def game_initialize():
-    global GAME, PLAYER
+    global GAME, PLAYER, FOV_CALCULATE
 
     blt.open()
     # default terminal size is 80x25
@@ -260,6 +316,8 @@ def game_initialize():
     blt.set("0x40: gfx/human_m.png, align=center")  # "@"
 
     GAME = obj_Game()
+
+    FOV_CALCULATE = True
 
     player_x, player_y = GAME.current_rooms[0].center()
     PLAYER = obj_Entity(player_x, player_y, "@")
