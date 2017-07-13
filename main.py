@@ -79,23 +79,23 @@ class obj_Entity:
             blt.put_ext(tile_x, tile_y, 0, 2, self.char)
 
 # dungeon generation functions
-def create_room(room, map):
+def create_room(room, new_map):
     # go through the tiles in the rectangle and make them passable
     for x in range(room.x1 + 1, room.x2):
         for y in range(room.y1 + 1, room.y2):
-            map[x][y].block_path = False
+            new_map[x][y].block_path = False
 
 
-def create_h_tunnel(x1, x2, y, map):
+def create_h_tunnel(x1, x2, y, new_map):
     # horizontal tunnel. min() and max() are used in case x1>x2
     for x in range(min(x1, x2), max(x1, x2) + 1):
-        map[x][y].block_path = False
+        new_map[x][y].block_path = False
 
 
-def create_v_tunnel(y1, y2, x, map):
+def create_v_tunnel(y1, y2, x, new_map):
     # vertical tunnel
     for y in range(min(y1, y2), max(y1, y2) + 1):
-        map[x][y].block_path = False
+        new_map[x][y].block_path = False
 
 
 def map_create():
@@ -351,7 +351,7 @@ def game_handle_keys():
 
 
 def game_initialize():
-    global GAME, PLAYER, FOV_CALCULATE, ENEMY, ENEMY2
+    global GAME, PLAYER, FOV_CALCULATE
 
     blt.open()
     # default terminal size is 80x25
