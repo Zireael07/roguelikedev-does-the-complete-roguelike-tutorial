@@ -1,3 +1,5 @@
+[![Code Health](https://landscape.io/github/Zireael07/roguelikedev-does-the-complete-roguelike-tutorial/master/landscape.svg?style=flat)](https://landscape.io/github/Zireael07/roguelikedev-does-the-complete-roguelike-tutorial/master)
+
 ## This game is part of r/RoguelikeDev Does The Complete Roguelike Tutorial game jam hosted by [aaron_ds](https://www.reddit.com/user/aaron_ds) on [roguelikedev](www.reddit/com/r/roguelikedev)
 
 # r/RoguelikeDev Does The Complete Roguelike Tutorial
