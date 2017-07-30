@@ -47,10 +47,12 @@ class Rect:
 
 # Entity
 class obj_Entity:
-    def __init__(self, x, y, char, creature=None, ai=None):
+    ''' Name is the name of the whole class, e.g. "goblin"'''
+    def __init__(self, x, y, char, name, creature=None, ai=None, container=None, item=None, equipment=None):
         self.x = x
         self.y = y
         self.char = char
+        self.name = name
 
         # both creature and AI are optional
         self.creature = creature
@@ -61,6 +63,30 @@ class obj_Entity:
         self.ai = ai
         if self.ai:
             ai.owner = self
+
+        # container allows the player to pick up items
+        self.container = container
+        if self.container:
+            container.owner = self
+
+        # these optional components make the entity an pickable and/or wearable item
+        self.item = item
+        if self.item:
+            item.owner = self
+
+        self.equipment = equipment
+        if self.equipment:
+            equipment.owner = self
+
+    def display_name(self):
+        if self.creature:
+            return (self.creature.name_instance + " the " + self.name)
+
+        if self.item:
+            if self.equipment and self.equipment.equipped:
+                return self.name + " (equipped in slot: " + self.equipment.slot + ")"
+            else:
+                return self.name
 
     def draw(self):
         is_visible = libtcod.map_is_in_fov(FOV_MAP, self.x, self.y)
@@ -132,9 +158,79 @@ class com_Creature:
             if self.death_function is not None:
                 self.death_function(self.owner)
 
+# Inventory and items
+class com_Container:
+    def __init__(self, inventory = None):
+        if inventory is None:
+            inventory = []
+        self.inventory = inventory
+
+    @property
+    def equipped_items(self):
+        list_equipped = [obj for obj in self.inventory
+                         if obj.equipment and obj.equipment.equipped]
+
+        return list_equipped
+
+class com_Item:
+    def __init__(self, weight=0.0):
+        self.weight = weight
+
+    def pick_up(self, actor):
+        if actor.container:
+            GAME.game_message("Picking up", "white")
+            actor.container.inventory.append(self.owner)
+            self.current_container = actor.container
+            GAME.current_entities.remove(self.owner)
+
+    def drop(self, new_x, new_y):
+        GAME.game_message("Item dropped", "white")
+        self.current_container.inventory.remove(self.owner)
+        GAME.current_entities.append(self.owner)
+        self.owner.x = new_x
+        self.owner.y = new_y
+
+    def use(self, actor):
+        if self.owner.equipment:
+            self.owner.equipment.toggle_equip(actor)
+            return
+
+
+class com_Equipment:
+    def __init__(self, slot, num_dice = 1, damage_dice = 4, attack_bonus = 0, defense_bonus = 0):
+        self.slot = slot
+        self.equipped = False
+        self.num_dice = num_dice
+        self.damage_dice = damage_dice
+        self.attack_bonus = attack_bonus
+        self.defense_bonus = defense_bonus
+
+    def toggle_equip(self, actor):
+        if self.equipped:
+            self.unequip(actor)
+        else:
+            self.equip(actor)
+
+    def equip(self, actor):
+        old_equipment = get_equipped_in_slot(actor, self.slot)
+        if old_equipment is not None:
+            #print "Unequipping " + old_equipment.owner.name
+            old_equipment.unequip(actor)
+
+        self.equipped = True
+        GAME.game_message("Item equipped", "white")
+
+    def unequip(self, actor):
+        self.equipped = False
+        GAME.game_message("Took off item", "white")
+
+
+
 class AI_test:
     def take_turn(self):
         self.owner.creature.move(libtcod.random_get_int(0,-1,1), libtcod.random_get_int(0,-1, 1))
+
+
 
 def roll(dice, sides):
     result = 0
@@ -153,6 +249,12 @@ def death_monster(monster):
     # remove from map
     GAME.current_entities.remove(monster)
 
+# returns the equipment in a slot, or None if it's empty
+def get_equipped_in_slot(actor, slot):
+    for obj in actor.container.inventory:
+        if obj.equipment and obj.equipment.slot == slot and obj.equipment.equipped:
+            return obj.equipment
+    return None
 
 
 # dungeon generation functions
@@ -278,7 +380,8 @@ def map_check_for_creature(x, y, exclude_entity=None):
         for ent in GAME.current_entities:
             if (ent is not exclude_entity
                 and ent.x == x
-                and ent.y == y):
+                and ent.y == y
+                and ent.creature):
                 target = ent
 
             if target:
@@ -290,6 +393,18 @@ def map_check_for_creature(x, y, exclude_entity=None):
             if (ent.x == x
                 and ent.y == y):
                 target = ent
+
+def map_check_for_item(x, y):
+    target = None
+
+    for ent in GAME.current_entities:
+        if (ent.x == x
+            and ent.y == y
+            and ent.item):
+            target = ent
+
+        if target:
+            return target
 
 
 # based on STI library for LOVE2D
@@ -354,6 +469,99 @@ def draw_messages(msg_history):
 
         i += 1
 
+# GUI
+# based on https://github.com/FirstAidKitten/Roguelike-Sandbox
+def create_window(x, y, w, h, title=None):
+    #test
+    blt.composition(False)
+
+    last_bg = blt.state(blt.TK_BKCOLOR)
+    blt.bkcolor(blt.color_from_argb(200, 0, 0, 0))
+    blt.clear_area(x - 2, y - 2, w + 2, h + 2)
+    blt.bkcolor(last_bg)
+
+    # upper border
+    border = '┌' + '─' * (w) + '┐'
+    blt.puts(x - 1, y - 1, border)
+    # sides
+    for i in range(h):
+        blt.puts(x - 1, y + i, '│')
+        blt.puts(x + w, y + i, '│')
+    # lower border
+    border = '└' + '─' * (w) + '┘'
+    blt.puts(x - 1, y + h, border)
+
+    if title is not None:
+        leng = len(title)
+        offset = (w + 2 - leng) // 2
+        blt.puts(x + offset, y - 1, title)
+
+
+def menu(header, options, width, title=None):
+    global FOV_CALCULATE
+
+    FOV_CALCULATE = True
+
+    menu_x = int((120 - width) / 2)
+
+    if len(options) > 26:
+        raise ValueError('Cannot have a menu with more than 26 options.')
+
+    header_height = 2
+
+    menu_h = int(header_height + 1 + 26)
+    menu_y = int((50 - menu_h) / 2)
+
+    # create a window
+
+    create_window(menu_x, menu_y, width, menu_h, title)
+
+
+    blt.puts(menu_x, menu_y, header)
+
+    # print all the options
+    y = menu_y + header_height + 1
+    letter_index = ord('a')
+    for option_text in options:
+        text = '(' + chr(letter_index) + ') ' + option_text
+        blt.puts(menu_x, y, text)
+        y += 1
+        letter_index += 1
+
+    blt.refresh()
+    # present the root console to the player and wait for a key-press
+    blt.set('input: filter = [keyboard]')
+    while True:
+        key = blt.read()
+        if blt.check(blt.TK_CHAR):
+            # convert the ASCII code to an index; if it corresponds to an option, return it
+            key = blt.state(blt.TK_CHAR)
+            index = key - ord('a')
+            if 0 <= index < len(options):
+                blt.set('input: filter = [keyboard, mouse+]')
+                blt.composition(True)
+                return index
+        else:
+            blt.set('input: filter = [keyboard, mouse+]')
+            blt.composition(True)
+            return None
+
+
+def inventory_menu(header, player):
+    # show a menu with each item of the inventory as an option
+    if len(player.container.inventory) == 0:
+        options = ['Inventory is empty.']
+    else:
+        options = [item.display_name() for item in player.container.inventory]
+
+    index = menu(header, options, 50, 'INVENTORY')
+
+    # if an item was chosen, return it
+    if index is None or len(player.container.inventory) == 0:
+        return None
+    return player.container.inventory[index]
+
+
 def draw_game():
     # draw map
     draw_map(GAME.current_map)
@@ -393,8 +601,16 @@ def random_free_tile(inc_map):
 def NPC_wrapper(char, name, x,y):
     creature_comp = com_Creature(name, death_function=death_monster)
     ai_comp = AI_test()
-    NPC = obj_Entity(x,y, char, creature=creature_comp, ai=ai_comp)
+    NPC = obj_Entity(x,y, char, name, creature=creature_comp, ai=ai_comp)
     return NPC
+
+
+def item_wrapper(char, name, item_slot, x,y):
+    eq_com = com_Equipment(item_slot)
+    item_com = com_Item()
+    item = obj_Entity(x, y, char, name, item=item_com, equipment=eq_com)
+    return item
+
 
 # Core game stuff
 def game_main_loop():
@@ -452,6 +668,22 @@ def game_handle_keys():
         PLAYER.creature.move(1, 0)
         FOV_CALCULATE = True
 
+    # items
+    if key == blt.TK_G:
+        ent = map_check_for_item(PLAYER.x, PLAYER.y)
+        #for ent in objects:
+        ent.item.pick_up(PLAYER)
+
+    if key == blt.TK_D:
+        if len(PLAYER.container.inventory) > 0:
+            #drop the last item
+            PLAYER.container.inventory[-1].item.drop(PLAYER.x, PLAYER.y)
+
+    if key == blt.TK_I:
+        chosen_item = inventory_menu("Inventory", PLAYER)
+        if chosen_item is not None:
+            if chosen_item.item:
+                chosen_item.item.use(PLAYER)
 
 def game_initialize():
     global GAME, PLAYER, FOV_CALCULATE
@@ -473,6 +705,8 @@ def game_initialize():
     # no such problems with @ and #
     blt.set("0x23: gfx/wall_stone.png, align=center")  # "#"
     blt.set("0x40: gfx/human_m.png, align=center")  # "@"
+    # items
+    blt.set("0x2215: gfx/longsword.png, align=center")  # "∕"
     # NPCs (we use Unicode private area here)
     blt.set("0xE000: gfx/kobold.png,  align=center")  # ""
     blt.set("0xE001: gfx/goblin.png, align=center")
@@ -482,9 +716,13 @@ def game_initialize():
     FOV_CALCULATE = True
 
     player_x, player_y = GAME.current_rooms[0].center()
+    container_com1 = com_Container()
     creature_com1 = com_Creature("Player")
-    PLAYER = obj_Entity(player_x, player_y, "@", creature=creature_com1)
+    PLAYER = obj_Entity(player_x, player_y, "@", "Player", creature=creature_com1, container=container_com1)
     #PLAYER = obj_Entity(1, 1, "@")
+
+    #test item
+    GAME.add_entity(item_wrapper(0x2215, "sword", "main_hand", *random_free_tile(GAME.current_map)))
 
     # two test enemies
     # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
