@@ -2,6 +2,7 @@
 
 from bearlibterminal import terminal as blt
 import libtcodpy as libtcod
+import math
 
 import constants
 
@@ -100,6 +101,12 @@ class obj_Entity:
             blt.put_ext(tile_x, tile_y, 0, 2, self.char)
 
 
+    def distance_to(self, other):
+        # return the distance to another object
+        dx = other.x - self.x
+        dy = other.y - self.y
+        return math.sqrt(dx ** 2 + dy ** 2)
+
 # Something that can move and fight
 class com_Creature:
     ''' Name_instance is the name of an individual, e.g. "Agrk"'''
@@ -173,8 +180,9 @@ class com_Container:
         return list_equipped
 
 class com_Item:
-    def __init__(self, weight=0.0):
+    def __init__(self, weight=0.0, use_function=None):
         self.weight = weight
+        self.use_function = use_function
 
     def pick_up(self, actor):
         if actor.container:
@@ -191,9 +199,15 @@ class com_Item:
         self.owner.y = new_y
 
     def use(self, actor):
+        # equip it if it's a piece of equipment
         if self.owner.equipment:
             self.owner.equipment.toggle_equip(actor)
             return
+        # use it if it has a function defined
+        if self.use_function:
+            # destroy after use, unless it was cancelled for some reason
+            if self.use_function() != 'cancelled':
+                self.current_container.inventory.remove(self.owner)
 
 
 class com_Equipment:
@@ -256,6 +270,33 @@ def get_equipped_in_slot(actor, slot):
             return obj.equipment
     return None
 
+# spells
+def closest_monster(max_range):
+    # find closest enemy, up to a maximum range, and in the player's FOV
+    closest_enemy = None
+    closest_dist = max_range + 1  # start with (slightly more than) maximum range
+
+    for object in GAME.current_entities:
+        if object.creature and not object == PLAYER and libtcod.map_is_in_fov(FOV_MAP, object.x, object.y):
+            # calculate distance between this object and the player
+            dist = PLAYER.distance_to(object)
+            if dist < closest_dist:  # it's closer, so remember it
+                closest_enemy = object
+                closest_dist = dist
+    return closest_enemy
+
+
+def cast_lightning():
+    # find closest enemy (inside a maximum range) and damage it
+    monster = closest_monster(constants.LIGHTNING_RANGE)
+    if monster is None:  # no enemy found within maximum range
+        GAME.game_message('No enemy is close enough to strike.', "red")
+        return 'cancelled'
+
+    # zap it!
+    GAME.game_message('A lighting bolt strikes the ' + monster.name + ' with a loud thunder! It deals '
+            + str(constants.LIGHTNING_DAMAGE) + ' damage.', "light blue")
+    monster.creature.take_damage(constants.LIGHTNING_DAMAGE)
 
 # dungeon generation functions
 def create_room(room, new_map):
@@ -605,10 +646,25 @@ def NPC_wrapper(char, name, x,y):
     return NPC
 
 
-def item_wrapper(char, name, item_slot, x,y):
+def eq_wrapper(char, name, item_slot, x,y):
     eq_com = com_Equipment(item_slot)
     item_com = com_Item()
     item = obj_Entity(x, y, char, name, item=item_com, equipment=eq_com)
+    return item
+
+
+# this assumes a random spawn location
+# we duplicate some code, sorry
+def usable_item_wrapper(char, name, use):
+    x, y = random_free_tile(GAME.current_map)
+    item_com = com_Item(use_function=use)
+    item = obj_Entity(x, y, char, name, item=item_com)
+    return item
+
+
+def item_wrapper(char, name, x,y):
+    item_com = com_Item()
+    item = obj_Entity(x, y, char, name, item=item_com)
     return item
 
 
@@ -707,6 +763,7 @@ def game_initialize():
     blt.set("0x40: gfx/human_m.png, align=center")  # "@"
     # items
     blt.set("0x2215: gfx/longsword.png, align=center")  # "∕"
+    blt.set("0x203D: gfx/scroll.png, align=center") # "‽"
     # NPCs (we use Unicode private area here)
     blt.set("0xE000: gfx/kobold.png,  align=center")  # ""
     blt.set("0xE001: gfx/goblin.png, align=center")
@@ -722,7 +779,8 @@ def game_initialize():
     #PLAYER = obj_Entity(1, 1, "@")
 
     #test item
-    GAME.add_entity(item_wrapper(0x2215, "sword", "main_hand", *random_free_tile(GAME.current_map)))
+    GAME.add_entity(eq_wrapper(0x2215, "sword", "main_hand", *random_free_tile(GAME.current_map)))
+    GAME.add_entity(usable_item_wrapper(0x203D, "scroll", cast_lightning))
 
     # two test enemies
     # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
