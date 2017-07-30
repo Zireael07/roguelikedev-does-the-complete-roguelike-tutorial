@@ -12,14 +12,19 @@ class struct_Tile:
         self.explored = False
 
 # Storing our stuff in one place
+# Most importantly this stores the entities on map and the messages to be displayed
 class obj_Game:
     def __init__(self):
         self.current_map, self.current_rooms = map_create()
         self.current_entities = []
+        self.message_history = []
 
     def add_entity(self, entity):
         if entity is not None:
             self.current_entities.append(entity)
+    
+    def game_message(self, msg, msg_color):
+        self.message_history.append((msg, msg_color))
 
 class Rect:
     # a rectangle on the map. used to characterize a room.
@@ -42,30 +47,20 @@ class Rect:
 
 # Entity
 class obj_Entity:
-    def __init__(self, x, y, char):
+    def __init__(self, x, y, char, creature=None, ai=None):
         self.x = x
         self.y = y
         self.char = char
 
-    def move(self, dx, dy):
-        if self.y + dy >= len(GAME.current_map) or self.y < 0:
-            print("Tried to move out of map")
-            return
+        # both creature and AI are optional
+        self.creature = creature
 
-        if self.x + dx >= len(GAME.current_map) or self.x < 0:
-            print("Tried to move out of map")
-            return
+        if self.creature:
+            creature.owner = self
 
-        target = None
-
-        target = map_check_for_creature(self.x + dx, self.y + dy, self)
-
-        tile_is_wall = (GAME.current_map[self.x + dx][self.y + dy].block_path == True)
-
-        if not tile_is_wall and target is None:
-            self.x += dx
-            self.y += dy
-
+        self.ai = ai
+        if self.ai:
+            ai.owner = self
 
     def draw(self):
         is_visible = libtcod.map_is_in_fov(FOV_MAP, self.x, self.y)
@@ -77,6 +72,88 @@ class obj_Entity:
 
             # draw the tile at different offset because size of a tile is much different than the size of an ASCII letter
             blt.put_ext(tile_x, tile_y, 0, 2, self.char)
+
+
+# Something that can move and fight
+class com_Creature:
+    ''' Name_instance is the name of an individual, e.g. "Agrk"'''
+    def __init__(self, name_instance,
+                 num_dice = 1, damage_dice = 6, base_def = 0, hp=10,
+                 death_function=None):
+        self.name_instance = name_instance
+        self.max_hp = hp
+        self.hp = hp
+        self.num_dice = num_dice
+        self.damage_dice = damage_dice
+        self.base_def = base_def
+        self.death_function = death_function
+
+    @property
+    def attack_mod(self):
+        total_attack = roll(self.num_dice, self.damage_dice)
+
+        return total_attack
+
+    def move(self, dx, dy):
+        if self.owner.y + dy >= len(GAME.current_map) or self.owner.y < 0:
+            print("Tried to move out of map")
+            return
+
+        if self.owner.x + dx >= len(GAME.current_map) or self.owner.x < 0:
+            print("Tried to move out of map")
+            return
+
+        target = None
+
+        target = map_check_for_creature(self.owner.x + dx, self.owner.y + dy, self.owner)
+
+        if target:
+            damage_dealt = self.attack_mod
+            self.attack(target, damage_dealt)
+
+        tile_is_wall = (GAME.current_map[self.owner.x + dx][self.owner.y + dy].block_path == True)
+
+        if not tile_is_wall and target is None:
+            self.owner.x += dx
+            self.owner.y += dy
+
+    def attack(self, target, damage):
+
+        GAME.game_message(self.name_instance + " attacks " + target.creature.name_instance + " for " +
+                     str(damage) +
+                     " damage!", "red")
+        target.creature.take_damage(damage)
+
+    def take_damage(self, damage):
+        self.hp -= damage
+        GAME.game_message(self.name_instance + "'s hp is " + str(self.hp) + "/" + str(self.max_hp), "white")
+
+        if self.hp <= 0:
+            if self.death_function is not None:
+                self.death_function(self.owner)
+
+class AI_test:
+    def take_turn(self):
+        self.owner.creature.move(libtcod.random_get_int(0,-1,1), libtcod.random_get_int(0,-1, 1))
+
+def roll(dice, sides):
+    result = 0
+    for i in range(0, dice, 1):
+        roll = libtcod.random_get_int(0, 1, sides)
+        result += roll
+
+    print 'Rolling ' + str(dice) + "d" + str(sides) + " result: " + str(result)
+    return result
+
+def death_monster(monster):
+    GAME.game_message(monster.creature.name_instance + " is dead!", "gray")
+    # clean up components
+    monster.creature = None
+    monster.ai = None
+    # remove from map
+    GAME.current_entities.remove(monster)
+
+
 
 # dungeon generation functions
 def create_room(room, new_map):
@@ -262,6 +339,21 @@ def draw_map(map_draw):
                     blt.put(tile_x, tile_y, ".")
 
 
+def draw_messages(msg_history):
+    if len(msg_history) <= constants.NUM_MESSAGES:
+        to_draw = msg_history
+    else:
+        to_draw = msg_history[-constants.NUM_MESSAGES:]
+
+    start_y = 45 - (constants.NUM_MESSAGES)
+
+    i = 0
+    for message, color in to_draw:
+        string = "[color=" + str(color) + "] " + message
+        blt.puts(2, start_y+i, string)
+
+        i += 1
+
 def draw_game():
     # draw map
     draw_map(GAME.current_map)
@@ -271,6 +363,9 @@ def draw_game():
     # draw our entities
     for ent in GAME.current_entities:
         ent.draw()
+
+    # draw messages
+    draw_messages(GAME.message_history)
 
 # Get free tiles of our map
 def get_free_tiles(inc_map):
@@ -293,10 +388,12 @@ def random_free_tile(inc_map):
     print("Coordinates are " + str(x) + " " + str(y))
     return x, y
 
-# This function will be expanded on later, that's why I'm not changing the actual Entity's init()
+# This function makes sure every NPC has the creature and AI components
 # X,Y need to come last because we're using tuple unwrapping
-def NPC_wrapper(char, x,y):
-    NPC = obj_Entity(x,y, char)
+def NPC_wrapper(char, name, x,y):
+    creature_comp = com_Creature(name, death_function=death_monster)
+    ai_comp = AI_test()
+    NPC = obj_Entity(x,y, char, creature=creature_comp, ai=ai_comp)
     return NPC
 
 # Core game stuff
@@ -323,6 +420,12 @@ def game_main_loop():
             if player_action == "QUIT":
                 game_quit = True
 
+            # let the AIs take action
+            if player_action != "no-action" and player_action != "mouse_click":
+                for ent in GAME.current_entities:
+                    if ent.ai:
+                        ent.ai.take_turn()
+
     # quit the game
     blt.close()
 
@@ -337,16 +440,16 @@ def game_handle_keys():
 
     # Player movement
     if key == blt.TK_UP:
-        PLAYER.move(0, -1)
+        PLAYER.creature.move(0, -1)
         FOV_CALCULATE = True
     if key == blt.TK_DOWN:
-        PLAYER.move(0, 1)
+        PLAYER.creature.move(0, 1)
         FOV_CALCULATE = True
     if key == blt.TK_LEFT:
-        PLAYER.move(-1, 0)
+        PLAYER.creature.move(-1, 0)
         FOV_CALCULATE = True
     if key == blt.TK_RIGHT:
-        PLAYER.move(1, 0)
+        PLAYER.creature.move(1, 0)
         FOV_CALCULATE = True
 
 
@@ -379,14 +482,15 @@ def game_initialize():
     FOV_CALCULATE = True
 
     player_x, player_y = GAME.current_rooms[0].center()
-    PLAYER = obj_Entity(player_x, player_y, "@")
+    creature_com1 = com_Creature("Player")
+    PLAYER = obj_Entity(player_x, player_y, "@", creature=creature_com1)
     #PLAYER = obj_Entity(1, 1, "@")
 
     # two test enemies
     # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
     # the GAME.add_entity function wraps the current_entities.append and checks if we're not trying to add a None
-    GAME.add_entity(NPC_wrapper(0xE000, *random_free_tile(GAME.current_map)))
-    GAME.add_entity(NPC_wrapper(0xE001, *random_free_tile(GAME.current_map)))
+    GAME.add_entity(NPC_wrapper(0xE000, "kobold", *random_free_tile(GAME.current_map)))
+    GAME.add_entity(NPC_wrapper(0xE001, "goblin", *random_free_tile(GAME.current_map)))
 
     # put player last
     GAME.current_entities.append(PLAYER)
