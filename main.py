@@ -714,15 +714,19 @@ def game_handle_keys():
     if key == blt.TK_UP:
         PLAYER.creature.move(0, -1)
         FOV_CALCULATE = True
+        return "player-moved"
     if key == blt.TK_DOWN:
         PLAYER.creature.move(0, 1)
         FOV_CALCULATE = True
+        return "player-moved"
     if key == blt.TK_LEFT:
         PLAYER.creature.move(-1, 0)
         FOV_CALCULATE = True
+        return "player-moved"
     if key == blt.TK_RIGHT:
         PLAYER.creature.move(1, 0)
         FOV_CALCULATE = True
+        return "player-moved"
 
     # items
     if key == blt.TK_G:
@@ -740,6 +744,9 @@ def game_handle_keys():
         if chosen_item is not None:
             if chosen_item.item:
                 chosen_item.item.use(PLAYER)
+
+    
+    return "no-action"
 
 def game_initialize():
     global GAME, PLAYER, FOV_CALCULATE
