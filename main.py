@@ -7,14 +7,14 @@ import math
 import constants
 
 # Needed for map
-class struct_Tile:
+class struct_Tile(object):
     def __init__(self, block_path):
         self.block_path = block_path
         self.explored = False
 
 # Storing our stuff in one place
 # Most importantly this stores the entities on map and the messages to be displayed
-class obj_Game:
+class obj_Game(object):
     def __init__(self):
         self.current_map, self.current_rooms = map_create()
         self.current_entities = []
@@ -27,7 +27,7 @@ class obj_Game:
     def game_message(self, msg, msg_color):
         self.message_history.append((msg, msg_color))
 
-class Rect:
+class Rect(object):
     # a rectangle on the map. used to characterize a room.
     def __init__(self, x, y, w, h):
         self.x1 = x
@@ -47,7 +47,7 @@ class Rect:
 
 
 # Entity
-class obj_Entity:
+class obj_Entity(object):
     ''' Name is the name of the whole class, e.g. "goblin"'''
     def __init__(self, x, y, char, name, creature=None, ai=None, container=None, item=None, equipment=None):
         self.x = x
@@ -108,7 +108,7 @@ class obj_Entity:
         return math.sqrt(dx ** 2 + dy ** 2)
 
 # Something that can move and fight
-class com_Creature:
+class com_Creature(object):
     ''' Name_instance is the name of an individual, e.g. "Agrk"'''
     def __init__(self, name_instance,
                  num_dice = 1, damage_dice = 6, base_def = 0, hp=10,
@@ -166,7 +166,7 @@ class com_Creature:
                 self.death_function(self.owner)
 
 # Inventory and items
-class com_Container:
+class com_Container(object):
     def __init__(self, inventory = None):
         if inventory is None:
             inventory = []
@@ -179,7 +179,7 @@ class com_Container:
 
         return list_equipped
 
-class com_Item:
+class com_Item(object):
     def __init__(self, weight=0.0, use_function=None):
         self.weight = weight
         self.use_function = use_function
@@ -210,7 +210,7 @@ class com_Item:
                 self.current_container.inventory.remove(self.owner)
 
 
-class com_Equipment:
+class com_Equipment(object):
     def __init__(self, slot, num_dice = 1, damage_dice = 4, attack_bonus = 0, defense_bonus = 0):
         self.slot = slot
         self.equipped = False
@@ -240,7 +240,7 @@ class com_Equipment:
 
 
 
-class AI_test:
+class AI_test(object):
     def take_turn(self):
         self.owner.creature.move(libtcod.random_get_int(0,-1,1), libtcod.random_get_int(0,-1, 1))
 
