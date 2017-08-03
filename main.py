@@ -4,6 +4,11 @@ from bearlibterminal import terminal as blt
 import libtcodpy as libtcod
 import math
 
+#save/load
+import jsonpickle
+import json
+import os
+
 import constants
 
 # Needed for map
@@ -19,6 +24,10 @@ class obj_Game(object):
         self.current_map, self.current_rooms = map_create()
         self.current_entities = []
         self.message_history = []
+
+        global FOV_MAP
+        FOV_MAP = map_make_fov(self.current_map)
+
 
     def add_entity(self, entity):
         if entity is not None:
@@ -389,20 +398,22 @@ def map_create():
     #     new_map[0][y].block_path = True
     #     new_map[constants.MAP_HEIGHT-1][y].block_path = True
 
-    map_make_fov(new_map)
+    #map_make_fov(new_map)
 
     return new_map, rooms
 
 
 def map_make_fov(incoming_map):
-    global FOV_MAP
+    #global FOV_MAP
 
-    FOV_MAP = libtcod.map_new(constants.MAP_WIDTH, constants.MAP_HEIGHT)
+    #FOV_MAP = libtcod.map_new(constants.MAP_WIDTH, constants.MAP_HEIGHT)
+    fov_map = libtcod.map_new(constants.MAP_WIDTH, constants.MAP_HEIGHT)
 
     for y in range(constants.MAP_HEIGHT):
         for x in range(constants.MAP_WIDTH):
-            libtcod.map_set_properties(FOV_MAP, x,y,
+            libtcod.map_set_properties(fov_map, x,y,
                                        not incoming_map[x][y].block_path, not incoming_map[x][y].block_path)
+    return fov_map
 
 def map_calculate_fov():
     global FOV_CALCULATE
@@ -667,6 +678,26 @@ def item_wrapper(char, name, x,y):
     item = obj_Entity(x, y, char, name, item=item_com)
     return item
 
+# save/load
+def save_game():
+    data = {
+        'serialized_player': jsonpickle.encode(PLAYER),
+        'serialized_game': jsonpickle.encode(GAME),
+    }
+
+    # write to file
+    with open('savegame.json', 'w') as save_file:
+        json.dump(data, save_file, indent=4)
+
+def load_game():
+    with open('savegame.json', 'r') as save_file:
+        data = json.load(save_file)
+
+    game = jsonpickle.decode(data['serialized_game'])
+    player = jsonpickle.decode(data['serialized_player'])
+
+    return game, player
+
 
 # Core game stuff
 def game_main_loop():
@@ -697,6 +728,9 @@ def game_main_loop():
                 for ent in GAME.current_entities:
                     if ent.ai:
                         ent.ai.take_turn()
+
+    # save game
+    save_game()
 
     # quit the game
     blt.close()
@@ -808,7 +842,29 @@ def game_initialize():
     blt.set("0xE000: gfx/kobold.png,  align=center")  # ""
     blt.set("0xE001: gfx/goblin.png, align=center")
 
-    GAME, PLAYER, FOV_CALCULATE = start_new_game()
+    # if we have a savegame, load it
+    if os.path.isfile('savegame.json'):
+        GAME, PLAYER = load_game()
+
+        # fix player ref
+        # player is always last in the entities list
+        player_id = len(GAME.current_entities) - 1
+        GAME.current_entities[player_id] = PLAYER
+
+        # handle FOV
+        FOV_CALCULATE = True
+        # recreate the fov
+        global FOV_MAP
+        FOV_MAP = map_make_fov(GAME.current_map)
+
+        # fix issue where the map is black on turn 1
+        map_calculate_fov()
+
+    else:
+        GAME, PLAYER, FOV_CALCULATE = start_new_game()
+
+        # fix issue where the map is black on turn 1
+        map_calculate_fov()
 
 # Execute
 if __name__ == '__main__':
