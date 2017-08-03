@@ -655,8 +655,8 @@ def eq_wrapper(char, name, item_slot, x,y):
 
 # this assumes a random spawn location
 # we duplicate some code, sorry
-def usable_item_wrapper(char, name, use):
-    x, y = random_free_tile(GAME.current_map)
+def usable_item_wrapper(char, name, use, game):
+    x, y = random_free_tile(game.current_map)
     item_com = com_Item(use_function=use)
     item = obj_Entity(x, y, char, name, item=item_com)
     return item
@@ -748,6 +748,39 @@ def game_handle_keys():
     
     return "no-action"
 
+
+def generate_items_monsters(game):
+    # test item
+    game.add_entity(eq_wrapper(0x2215, "sword", "main_hand", *random_free_tile(game.current_map)))
+    game.add_entity(usable_item_wrapper(0x203D, "scroll", cast_lightning, game))
+
+    # two test enemies
+    # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
+    # the game.add_entity function wraps the current_entities.append and checks if we're not trying to add a None
+    game.add_entity(NPC_wrapper(0xE000, "kobold", *random_free_tile(game.current_map)))
+    game.add_entity(NPC_wrapper(0xE001, "goblin", *random_free_tile(game.current_map)))
+
+
+def start_new_game():
+    game = obj_Game()
+
+    fov = True
+
+    player_x, player_y = game.current_rooms[0].center()
+    container_com1 = com_Container()
+    creature_com1 = com_Creature("Player")
+    player = obj_Entity(player_x, player_y, "@", "Player", creature=creature_com1, container=container_com1)
+    # player = obj_Entity(1, 1, "@")
+
+    generate_items_monsters(game)
+
+    # put player last
+    game.current_entities.append(player)
+
+    return game, player, fov
+
+
+
 def game_initialize():
     global GAME, PLAYER, FOV_CALCULATE
 
@@ -775,28 +808,7 @@ def game_initialize():
     blt.set("0xE000: gfx/kobold.png,  align=center")  # ""
     blt.set("0xE001: gfx/goblin.png, align=center")
 
-    GAME = obj_Game()
-
-    FOV_CALCULATE = True
-
-    player_x, player_y = GAME.current_rooms[0].center()
-    container_com1 = com_Container()
-    creature_com1 = com_Creature("Player")
-    PLAYER = obj_Entity(player_x, player_y, "@", "Player", creature=creature_com1, container=container_com1)
-    #PLAYER = obj_Entity(1, 1, "@")
-
-    #test item
-    GAME.add_entity(eq_wrapper(0x2215, "sword", "main_hand", *random_free_tile(GAME.current_map)))
-    GAME.add_entity(usable_item_wrapper(0x203D, "scroll", cast_lightning))
-
-    # two test enemies
-    # * means we're unwrapping the tuple (Python 2.7 only allows it as the last parameter)
-    # the GAME.add_entity function wraps the current_entities.append and checks if we're not trying to add a None
-    GAME.add_entity(NPC_wrapper(0xE000, "kobold", *random_free_tile(GAME.current_map)))
-    GAME.add_entity(NPC_wrapper(0xE001, "goblin", *random_free_tile(GAME.current_map)))
-
-    # put player last
-    GAME.current_entities.append(PLAYER)
+    GAME, PLAYER, FOV_CALCULATE = start_new_game()
 
 # Execute
 if __name__ == '__main__':
