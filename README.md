@@ -18,5 +18,7 @@ Basic roguelike stuff is being handled by the venerable libtcod.
 
 You need to have Python 2.7.10 or higher and run **pip install bearlibterminal**. I will look into providing a bundled blt version, but that will come later.
 
+For saving/loading to work, you need to run **pip install jsonpickle**.
+
 ## Other participants that use BearLibTerminal
 [VedVid](https://github.com/VedVid/roguelikedev-does-the-complete-roguelike-tutorial)
