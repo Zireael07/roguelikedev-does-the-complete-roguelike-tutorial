@@ -681,7 +681,7 @@ def item_wrapper(char, name, x,y):
 # save/load
 def save_game():
     data = {
-        'serialized_player': jsonpickle.encode(PLAYER),
+        'serialized_player_index': jsonpickle.encode(GAME.current_entities.index(PLAYER)),
         'serialized_game': jsonpickle.encode(GAME),
     }
 
@@ -694,7 +694,9 @@ def load_game():
         data = json.load(save_file)
 
     game = jsonpickle.decode(data['serialized_game'])
-    player = jsonpickle.decode(data['serialized_player'])
+    player_ind = jsonpickle.decode(data['serialized_player_index'])
+
+    player = game.current_entities[player_ind]
 
     return game, player
 
@@ -848,8 +850,10 @@ def game_initialize():
 
         # fix player ref
         # player is always last in the entities list
-        player_id = len(GAME.current_entities) - 1
-        GAME.current_entities[player_id] = PLAYER
+        # the assumption isn't true if you pick up and drop some items
+        # so we handle it in load_game()
+        #player_id = len(GAME.current_entities) - 1
+        #GAME.current_entities[player_id] = PLAYER
 
         # handle FOV
         FOV_CALCULATE = True
