@@ -16,6 +16,7 @@ class struct_Tile(object):
     def __init__(self, block_path):
         self.block_path = block_path
         self.explored = False
+        self.stairs = False
 
 # Storing our stuff in one place
 # Most importantly this stores the entities on map and the messages to be displayed
@@ -35,6 +36,26 @@ class obj_Game(object):
     
     def game_message(self, msg, msg_color):
         self.message_history.append((msg, msg_color))
+
+    def next_level(self):
+        global FOV_CALCULATE
+        self.game_message("You descend deeper in the dungeon", "violet")
+
+        # make the map
+        self.current_map, self.current_rooms = map_create()
+        global FOV_MAP
+        FOV_MAP = map_make_fov(self.current_map)
+
+        # clear list of current entities
+        self.current_entities = []
+        # append player
+        self.add_entity(PLAYER)
+
+        # move player to center of room 0
+        PLAYER.x, PLAYER.y = self.current_rooms[0].center()
+
+        # force recalc the FOV
+        FOV_CALCULATE = True
 
 class Rect(object):
     # a rectangle on the map. used to characterize a room.
@@ -385,6 +406,11 @@ def map_create():
             rooms.append(new_room)
             num_rooms += 1
 
+
+    # stairs in final room
+    stairs_x, stairs_y = rooms[len(rooms)-1].center()
+    new_map[stairs_x][stairs_y].stairs = True
+
     # some walls just to test
     #new_map[10][10].block_path = True
     #new_map[12][12].block_path = True
@@ -481,29 +507,38 @@ def draw_map(map_draw):
                 blt.color("white")
                 map_draw[x][y].explored = True
 
-                if map_draw[x][y].block_path == True:
-                    # draw wall
-                    blt.put(tile_x, tile_y, "#")
-
+                if map_draw[x][y].stairs == True:
+                    # draw stairs
+                    blt.put(tile_x, tile_y, ">")
                 else:
-                    # draw floor
-                    blt.put(tile_x, tile_y, 0x3002)
-                    #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
-                    blt.put(tile_x, tile_y, ".")
+                    if map_draw[x][y].block_path == True:
+                        # draw wall
+                        blt.put(tile_x, tile_y, "#")
+
+                    else:
+                        # draw floor
+                        blt.put(tile_x, tile_y, 0x3002)
+                        #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
+                        blt.put(tile_x, tile_y, ".")
 
             elif map_draw[x][y].explored:
                 tile_x, tile_y = draw_iso(x, y)
                 # shade the explored tiles
                 blt.color("gray")
-                if map_draw[x][y].block_path == True:
-                    # draw wall
-                    blt.put(tile_x, tile_y, "#")
 
+                if map_draw[x][y].stairs == True:
+                    # draw stairs
+                    blt.put(tile_x, tile_y, ">")
                 else:
-                    # draw floor
-                    blt.put(tile_x, tile_y, 0x3002)
-                    #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
-                    blt.put(tile_x, tile_y, ".")
+                    if map_draw[x][y].block_path == True:
+                        # draw wall
+                        blt.put(tile_x, tile_y, "#")
+
+                    else:
+                        # draw floor
+                        blt.put(tile_x, tile_y, 0x3002)
+                        #we draw the dot for reference so that we know what on-screen position the tile_x, tile_y refers to
+                        blt.put(tile_x, tile_y, ".")
 
 
 def draw_messages(msg_history):
@@ -764,6 +799,11 @@ def game_handle_keys():
         FOV_CALCULATE = True
         return "player-moved"
 
+    # use the stairs if any
+    if key == blt.TK_PERIOD and blt.check(blt.TK_SHIFT):
+        if GAME.current_map[PLAYER.x][PLAYER.y].stairs:
+            GAME.next_level()
+
     # items
     if key == blt.TK_G:
         ent = map_check_for_item(PLAYER.x, PLAYER.y)
@@ -837,6 +877,7 @@ def game_initialize():
     # no such problems with @ and #
     blt.set("0x23: gfx/wall_stone.png, align=center")  # "#"
     blt.set("0x40: gfx/human_m.png, align=center")  # "@"
+    blt.set("0x003E: gfx/stairs_down.png, align=center")  # ">"
     # items
     blt.set("0x2215: gfx/longsword.png, align=center")  # "∕"
     blt.set("0x203D: gfx/scroll.png, align=center") # "‽"
